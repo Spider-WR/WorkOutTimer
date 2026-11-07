@@ -78,6 +78,7 @@ label.l{display:block;color:var(--mute);font-size:.8rem;margin:12px 0 4px}
     <div id="rName"></div>
     <div id="rTime">0:00</div>
     <div id="rSub"></div>
+    <div id="rWake" style="margin-top:10px;font-size:.8rem;color:#fff9"></div>
   </div>
   <div style="width:100%">
     <div class="prog"><i id="rProg"></i></div>
@@ -202,13 +203,21 @@ function build(p){
   for(let k=1;k<=p.sets;k++)p.intervals.forEach(i=>s.push({name:i.name,sec:i.sec,color:i.color,set:k}));
   return s;
 }
-async function lockScreen(){try{if('wakeLock' in navigator)wake=await navigator.wakeLock.request('screen')}catch(e){}}
+let wakeErr='',wakeTry=0;
+async function lockScreen(){
+  if(wake||document.hidden)return;
+  if(!('wakeLock' in navigator)){wakeErr='เบราว์เซอร์ไม่รองรับ';updWake();return}
+  try{wake=await navigator.wakeLock.request('screen');wakeErr='';wake.addEventListener('release',()=>{wake=null;updWake()})}
+  catch(e){wake=null;wakeErr=e.name+(e.message?': '+e.message:'')}
+  updWake();
+}
+function updWake(){const el=$('rWake');if(el)el.textContent=wake?'🔒 จอไม่ดับ':'⚠ จอดับได้'+(wakeErr?' ('+wakeErr+')':'')}
 document.addEventListener('visibilitychange',()=>{if(run&&!document.hidden)lockScreen()});
 
 function startRun(p){
   initAudio();setSoundIcon();
   run={p,steps:build(p),i:0,end:0,left:0,paused:false,last:null,done:false};
-  show('run');lockScreen();
+  show('run');updWake();lockScreen();
   enterStep(0,true);
   clearInterval(timer);timer=setInterval(tick,100);
 }
@@ -237,6 +246,7 @@ function tick(){
     return enterStep(run.i+1);
   }
   run.left=left;
+  if(!wake&&++wakeTry%50===0)lockScreen();
   const sec=Math.ceil(left/1000);
   if(sec<=3&&sec!==run.last){run.last=sec;beep(880,.12);vib(40)}
   draw();
@@ -251,6 +261,7 @@ function finish(){
 function stop(){
   clearInterval(timer);run=null;
   try{wake&&wake.release()}catch(e){}
+  wake=null;
   $('btnPause').textContent='⏸';
   renderList();show('home');
 }
