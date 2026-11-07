@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Interval Timer</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg">
+<style>
+:root{--bg:#0f172a;--card:#1e293b;--card2:#273449;--text:#f1f5f9;--mute:#94a3b8;--acc:#38bdf8;--danger:#f87171;--c:#22c55e}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:system-ui,"Segoe UI","Noto Sans Thai",sans-serif}
+button{font:inherit;color:inherit;border:0;border-radius:12px;padding:10px 16px;background:var(--card2);cursor:pointer}
+button:active{transform:scale(.97)}
+button.primary{background:var(--acc);color:#04202e;font-weight:700}
+button.danger{background:transparent;color:var(--danger)}
+input,select{font:inherit;color:inherit;background:var(--card2);border:1px solid #334155;border-radius:10px;padding:9px 10px;min-width:0}
+input:focus{outline:2px solid var(--acc)}
+.screen{max-width:560px;margin:0 auto;padding:16px 16px calc(24px + env(safe-area-inset-bottom))}
+header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+h1{font-size:1.4rem;margin:0}
+.card{background:var(--card);border-radius:16px;padding:14px;margin-bottom:12px;display:flex;align-items:center;gap:12px}
+.card .info{flex:1;min-width:0}
+.card .name{font-weight:700;font-size:1.05rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card .meta{color:var(--mute);font-size:.85rem;margin-top:2px}
+.bar{display:flex;height:6px;border-radius:3px;overflow:hidden;margin-top:8px;gap:1px}
+.bar i{display:block}
+.play{width:52px;height:52px;border-radius:50%;padding:0;font-size:1.3rem;flex:none}
+.row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+.ivl{background:var(--card);border-radius:14px;padding:10px;margin-bottom:10px}
+.ivl .row:last-child{margin-bottom:0}
+.dot{width:34px;height:34px;border-radius:50%;padding:0;flex:none;border:2px solid #fff3}
+label.l{display:block;color:var(--mute);font-size:.8rem;margin:12px 0 4px}
+.num{width:64px;text-align:center}
+.sm{padding:6px 10px;font-size:.9rem}
+#run{position:fixed;inset:0;background:color-mix(in srgb,var(--c) 38%,#0b1220);display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:calc(18px + env(safe-area-inset-top)) 18px calc(22px + env(safe-area-inset-bottom));transition:background .3s;text-align:center}
+#run .top{width:100%;display:flex;justify-content:space-between;align-items:center;color:#fffc}
+#rName{font-size:clamp(1.6rem,7vw,2.6rem);font-weight:800;letter-spacing:.02em}
+#rTime{font-size:clamp(5rem,28vw,9.5rem);font-weight:800;font-variant-numeric:tabular-nums;line-height:1}
+#rSub{color:#fffb;font-size:1.05rem}
+.prog{width:100%;height:10px;background:#0004;border-radius:5px;overflow:hidden}
+.prog i{display:block;height:100%;width:0;background:#fff}
+.ctrls{display:flex;gap:14px;align-items:center;justify-content:center}
+.ctrls button{background:#0005;width:60px;height:60px;border-radius:50%;padding:0;font-size:1.3rem}
+.ctrls button.big{width:84px;height:84px;background:#fff;color:#111;font-size:2rem}
+[hidden]{display:none!important}
+.empty{color:var(--mute);text-align:center;padding:30px 0}
+</style>
+</head>
+<body>
+
+<!-- รายการ -->
+<div id="home" class="screen">
+  <header><h1>⏱ Interval Timer</h1><button class="primary" id="btnNew">+ สร้างใหม่</button></header>
+  <div id="list"></div>
+</div>
+
+<!-- แก้ไข -->
+<div id="edit" class="screen" hidden>
+  <header><h1 id="eTitle">ตั้งค่าไทเมอร์</h1><button id="btnBack">← กลับ</button></header>
+  <label class="l">ชื่อ</label>
+  <input id="eName" style="width:100%" placeholder="เช่น Tabata">
+  <label class="l">จำนวนรอบ (ทำซ้ำชุด interval ทั้งหมด)</label>
+  <input id="eSets" type="number" min="1" max="99" class="num">
+  <label class="l">Interval</label>
+  <div id="eRows"></div>
+  <button id="btnAdd" style="width:100%;margin-bottom:16px">+ เพิ่ม interval</button>
+  <div class="row"><button class="primary" id="btnSave" style="flex:1">บันทึก</button><button class="primary" id="btnSaveRun" style="flex:1;background:#4ade80">บันทึกและเริ่ม</button></div>
+  <div class="row" style="margin-top:6px"><button id="btnDup" style="flex:1">คัดลอก</button><button class="danger" id="btnDel" style="flex:1">ลบ</button></div>
+</div>
+
+<!-- จับเวลา -->
+<div id="run" hidden>
+  <div class="top"><span id="rSet"></span><span><button class="sm" id="btnSound" style="background:#0004">🔊</button> <button class="sm" id="btnStop" style="background:#0004">✕ ปิด</button></span></div>
+  <div>
+    <div id="rName"></div>
+    <div id="rTime">0:00</div>
+    <div id="rSub"></div>
+  </div>
+  <div style="width:100%">
+    <div class="prog"><i id="rProg"></i></div>
+    <div class="ctrls" style="margin-top:18px">
+      <button id="btnPrev">⏮</button>
+      <button id="btnPause" class="big">⏸</button>
+      <button id="btnNext">⏭</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const COLORS=['#22c55e','#ef4444','#3b82f6','#f59e0b','#a855f7','#14b8a6','#ec4899'];
+const $=id=>document.getElementById(id);
+const store={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+const uid=()=>Math.random().toString(36).slice(2,9);
+const fmt=s=>{s=Math.max(0,Math.ceil(s));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')};
+const iv=(name,sec,ci)=>({name,sec,color:COLORS[ci]});
+
+let presets=store.get('tp_presets',null)||[
+  {id:uid(),name:'Tabata',sets:8,intervals:[iv('ออกแรง',20,1),iv('พัก',10,0)]},
+  {id:uid(),name:'HIIT 30/15',sets:10,intervals:[iv('ออกแรง',30,1),iv('พัก',15,0)]},
+  {id:uid(),name:'ชกมวย 3 ยก',sets:3,intervals:[iv('ยก',180,1),iv('พัก',60,0)]},
+  {id:uid(),name:'Pomodoro',sets:4,intervals:[iv('โฟกัส',1500,2),iv('พัก',300,0)]},
+];
+let soundOn=store.get('tp_sound',true);
+const save=()=>store.set('tp_presets',presets);
+const total=p=>p.sets*p.intervals.reduce((a,i)=>a+i.sec,0);
+
+function show(name){['home','edit','run'].forEach(n=>$(n).hidden=n!==name)}
+
+/* ---------- รายการ ---------- */
+function renderList(){
+  const el=$('list');
+  if(!presets.length){el.innerHTML='<div class="empty">ยังไม่มีไทเมอร์ กด "+ สร้างใหม่"</div>';return}
+  el.innerHTML=presets.map(p=>{
+    const t=total(p);
+    const bar=p.intervals.map(i=>`<i style="flex:${i.sec};background:${i.color}"></i>`).join('');
+    return `<div class="card" data-id="${p.id}">
+      <div class="info" data-edit><div class="name">${esc(p.name)}</div>
+      <div class="meta">${p.sets} รอบ · ${p.intervals.length} interval · รวม ${fmt(t)} นาที</div>
+      <div class="bar">${bar}</div></div>
+      <button class="primary play" data-play>▶</button></div>`}).join('');
+}
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+$('list').addEventListener('click',e=>{
+  const card=e.target.closest('.card');if(!card)return;
+  const p=presets.find(x=>x.id===card.dataset.id);
+  if(e.target.closest('[data-play]'))startRun(p);
+  else openEdit(p);
+});
+$('btnNew').onclick=()=>openEdit(null);
+
+/* ---------- แก้ไข ---------- */
+let draft=null,isNew=false;
+function openEdit(p){
+  isNew=!p;
+  draft=p?JSON.parse(JSON.stringify(p)):{id:uid(),name:'',sets:1,intervals:[iv('ออกแรง',30,1),iv('พัก',10,0)]};
+  $('eTitle').textContent=isNew?'สร้างไทเมอร์':'แก้ไขไทเมอร์';
+  $('eName').value=draft.name;$('eSets').value=draft.sets;
+  $('btnDup').hidden=$('btnDel').hidden=isNew;
+  renderRows();show('edit');window.scrollTo(0,0);
+}
+function renderRows(){
+  $('eRows').innerHTML=draft.intervals.map((it,i)=>`<div class="ivl" data-i="${i}">
+    <div class="row"><button class="dot" data-color style="background:${it.color}"></button>
+      <input data-f="name" value="${esc(it.name)}" style="flex:1" placeholder="ชื่อ">
+      <button class="sm" data-up ${i==0?'disabled':''}>↑</button><button class="sm" data-down ${i==draft.intervals.length-1?'disabled':''}>↓</button>
+      <button class="sm danger" data-rm ${draft.intervals.length<2?'disabled':''}>🗑</button></div>
+    <div class="row"><input data-f="m" type="number" min="0" max="999" class="num" value="${Math.floor(it.sec/60)}"> นาที
+      <input data-f="s" type="number" min="0" max="59" class="num" value="${it.sec%60}"> วินาที</div></div>`).join('');
+}
+$('eRows').addEventListener('input',e=>{
+  const row=e.target.closest('.ivl');if(!row)return;
+  const it=draft.intervals[+row.dataset.i],f=e.target.dataset.f;
+  if(f==='name')it.name=e.target.value;
+  else{const m=+row.querySelector('[data-f=m]').value||0,s=+row.querySelector('[data-f=s]').value||0;it.sec=m*60+s}
+});
+$('eRows').addEventListener('click',e=>{
+  const row=e.target.closest('.ivl');if(!row)return;
+  const i=+row.dataset.i,a=draft.intervals;
+  if(e.target.closest('[data-color]')){a[i].color=COLORS[(COLORS.indexOf(a[i].color)+1)%COLORS.length]}
+  else if(e.target.closest('[data-up]')&&i>0){[a[i-1],a[i]]=[a[i],a[i-1]]}
+  else if(e.target.closest('[data-down]')&&i<a.length-1){[a[i+1],a[i]]=[a[i],a[i+1]]}
+  else if(e.target.closest('[data-rm]')&&a.length>1){a.splice(i,1)}
+  else return;
+  renderRows();
+});
+$('btnAdd').onclick=()=>{const n=draft.intervals.length;draft.intervals.push(iv('Interval '+(n+1),30,n%COLORS.length));renderRows()};
+$('btnBack').onclick=()=>{renderList();show('home')};
+function commit(){
+  draft.name=$('eName').value.trim()||'ไม่มีชื่อ';
+  draft.sets=Math.max(1,Math.min(99,+$('eSets').value||1));
+  if(draft.intervals.some(i=>i.sec<1)){alert('ทุก interval ต้องยาวอย่างน้อย 1 วินาที');return false}
+  const idx=presets.findIndex(p=>p.id===draft.id);
+  if(idx>=0)presets[idx]=draft;else presets.push(draft);
+  save();return true;
+}
+$('btnSave').onclick=()=>{if(commit()){renderList();show('home')}};
+$('btnSaveRun').onclick=()=>{if(commit()){renderList();startRun(draft)}};
+$('btnDup').onclick=()=>{const c=JSON.parse(JSON.stringify(draft));c.id=uid();c.name=($('eName').value.trim()||draft.name)+' (สำเนา)';presets.push(c);save();renderList();show('home')};
+$('btnDel').onclick=()=>{if(confirm('ลบ "'+draft.name+'" ?')){presets=presets.filter(p=>p.id!==draft.id);save();renderList();show('home')}};
+
+/* ---------- เสียง ---------- */
+let ac=null;
+function initAudio(){try{ac=ac||new (window.AudioContext||window.webkitAudioContext)();if(ac.state==='suspended')ac.resume()}catch(e){}}
+function beep(freq,dur,vol=.35){
+  if(!soundOn||!ac)return;
+  const o=ac.createOscillator(),g=ac.createGain(),t=ac.currentTime;
+  o.type='sine';o.frequency.value=freq;
+  g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(vol,t+.01);g.gain.exponentialRampToValueAtTime(.001,t+dur);
+  o.connect(g).connect(ac.destination);o.start(t);o.stop(t+dur+.02);
+}
+const vib=p=>{try{navigator.vibrate&&navigator.vibrate(p)}catch(e){}};
+function setSoundIcon(){$('btnSound').textContent=soundOn?'🔊':'🔇'}
+$('btnSound').onclick=()=>{soundOn=!soundOn;store.set('tp_sound',soundOn);setSoundIcon()};
+
+/* ---------- จับเวลา ---------- */
+let run=null,timer=null,wake=null;
+function build(p){
+  const s=[];
+  for(let k=1;k<=p.sets;k++)p.intervals.forEach(i=>s.push({name:i.name,sec:i.sec,color:i.color,set:k}));
+  return s;
+}
+async function lockScreen(){try{if('wakeLock' in navigator)wake=await navigator.wakeLock.request('screen')}catch(e){}}
+document.addEventListener('visibilitychange',()=>{if(run&&!document.hidden)lockScreen()});
+
+function startRun(p){
+  initAudio();setSoundIcon();
+  run={p,steps:build(p),i:0,end:0,left:0,paused:false,last:null,done:false};
+  show('run');lockScreen();
+  enterStep(0,true);
+  clearInterval(timer);timer=setInterval(tick,100);
+}
+function enterStep(i,silent){
+  run.i=i;const s=run.steps[i];
+  run.left=s.sec*1000;run.end=Date.now()+run.left;run.last=null;
+  $('run').style.setProperty('--c',s.color);
+  $('rName').textContent=s.name;
+  $('rSet').textContent=`รอบ ${s.set}/${run.p.sets} · ${i%run.p.intervals.length+1}/${run.p.intervals.length}`;
+  if(!silent){beep(1320,.45,.5);vib(200)}
+  draw();
+}
+function draw(){
+  const s=run.steps[run.i];
+  $('rTime').textContent=fmt(run.left/1000);
+  $('rProg').style.width=(100-run.left/(s.sec*1000)*100)+'%';
+  const rest=run.steps.slice(run.i+1).reduce((a,x)=>a+x.sec,0)+run.left/1000;
+  const nxt=run.steps[run.i+1];
+  $('rSub').textContent=(nxt?'ถัดไป: '+nxt.name+' · ':'')+'เหลือรวม '+fmt(rest);
+}
+function tick(){
+  if(!run||run.paused||run.done)return;
+  const left=run.end-Date.now();
+  if(left<=0){
+    if(run.i+1>=run.steps.length)return finish();
+    return enterStep(run.i+1);
+  }
+  run.left=left;
+  const sec=Math.ceil(left/1000);
+  if(sec<=3&&sec!==run.last){run.last=sec;beep(880,.12);vib(40)}
+  draw();
+}
+function finish(){
+  run.done=true;run.left=0;
+  $('rName').textContent='เสร็จแล้ว! 🎉';$('rTime').textContent='0:00';$('rSub').textContent='';
+  $('rProg').style.width='100%';$('btnPause').textContent='↺';
+  $('run').style.setProperty('--c','#22c55e');
+  [0,.22,.44].forEach(d=>setTimeout(()=>beep(1320,.2,.5),d*1000));vib([200,100,200,100,400]);
+}
+function stop(){
+  clearInterval(timer);run=null;
+  try{wake&&wake.release()}catch(e){}
+  $('btnPause').textContent='⏸';
+  renderList();show('home');
+}
+$('btnStop').onclick=stop;
+$('btnPause').onclick=()=>{
+  if(run.done){const p=run.p;startRun(p);$('btnPause').textContent='⏸';return}
+  run.paused=!run.paused;
+  if(run.paused){run.left=run.end-Date.now()}else{run.end=Date.now()+run.left}
+  $('btnPause').textContent=run.paused?'▶':'⏸';
+};
+$('btnNext').onclick=()=>{if(run.done)return;run.paused=false;$('btnPause').textContent='⏸';run.i+1>=run.steps.length?finish():enterStep(run.i+1)};
+$('btnPrev').onclick=()=>{
+  if(run.done){run.done=false;$('btnPause').textContent='⏸';enterStep(run.steps.length-1);return}
+  const elapsed=run.steps[run.i].sec*1000-run.left;
+  run.paused=false;$('btnPause').textContent='⏸';
+  enterStep(elapsed>2000?run.i:Math.max(0,run.i-1));
+};
+document.addEventListener('keydown',e=>{
+  if(!run||e.target.tagName==='INPUT')return;
+  if(e.code==='Space'){e.preventDefault();$('btnPause').click()}
+  else if(e.code==='ArrowRight')$('btnNext').click();
+  else if(e.code==='ArrowLeft')$('btnPrev').click();
+  else if(e.code==='Escape')stop();
+});
+
+renderList();
+if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script>
+</body>
+</html>
