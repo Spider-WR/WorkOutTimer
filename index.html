@@ -47,6 +47,19 @@ label.l{display:block;color:var(--mute);font-size:.8rem;margin:12px 0 4px}
 .ctrls button.big{width:84px;height:84px;background:#fff;color:#111;font-size:2rem}
 #picker{position:fixed;inset:0;background:var(--bg);z-index:10;overflow-y:auto}
 #picker .screen{padding-top:12px}
+.tabs{display:flex;gap:8px;margin-bottom:14px}
+.tabs button{flex:1}
+.tabs button.on{background:var(--acc);color:#04202e;font-weight:700}
+.chk{width:40px;height:40px;border-radius:50%;padding:0;flex:none;border:2px solid #475569;background:transparent}
+.chk.on{background:#22c55e;border-color:#22c55e;color:#052e16;font-weight:800}
+.today{outline:2px solid var(--acc)}
+details summary{cursor:pointer;list-style:none}
+details summary::-webkit-details-marker{display:none}
+.exl{margin:8px 0 0;padding:0;list-style:none;font-size:.9rem}
+.exl li{padding:5px 0;border-top:1px solid #334155}
+.exl small{display:block;color:var(--mute)}
+.grp{margin-bottom:6px}
+.chiprow{display:flex;gap:6px;flex-wrap:wrap}
 .chips{display:flex;gap:6px;overflow-x:auto;padding:10px 0;position:sticky;top:0;background:var(--bg)}
 .chip{flex:none;padding:6px 14px;border-radius:99px;font-size:.9rem}
 .chip.on{background:var(--acc);color:#04202e;font-weight:700}
@@ -62,7 +75,9 @@ label.l{display:block;color:var(--mute);font-size:.8rem;margin:12px 0 4px}
 <!-- รายการ -->
 <div id="home" class="screen">
   <header><h1>⏱ Interval Timer</h1><button class="primary" id="btnNew">+ สร้างใหม่</button></header>
+  <div class="tabs"><button id="tabT" class="on">⏱ ไทเมอร์</button><button id="tabP">📅 แผนสัปดาห์</button></div>
   <div id="list"></div>
+  <div id="plan" hidden></div>
 </div>
 
 <!-- แก้ไข -->
@@ -172,6 +187,14 @@ const EX=[
 ['ยืดเหยียด','ยืดไหล่ (Shoulder Stretch)','ไหล่ · สะบัก'],
 ['ยืดเหยียด','ท่าเด็ก (Child\'s Pose)','หลัง · สะโพก · ไหล่'],
 ['ยืดเหยียด','ยืดสะโพก (Hip Flexor Stretch)','สะโพกด้านหน้า · ต้นขาหน้า'],
+['อก','ดัมเบลเพรสนอนพื้น (Dumbbell Floor Press)','อกใหญ่ · ไตรเซ็ปส์ · ไหล่หน้า'],
+['หลัง','พายเรือดัมเบลข้างเดียว (One-arm Dumbbell Row)','หลังส่วนกลาง · ปีกหลัง · ไบเซ็ปส์'],
+['หลัง','โรมาเนียนเดดลิฟต์ดัมเบล (Dumbbell Romanian Deadlift)','ต้นขาหลัง · ก้น · หลังส่วนล่าง'],
+['ไหล่','ยักไหล่ดัมเบล (Dumbbell Shrug)','กล้ามเนื้อบ่า · ต้นคอ'],
+['ขา','ก็อบเล็ตสควอช (Goblet Squat)','ต้นขาหน้า · ก้น · แกนกลางลำตัว'],
+['ขา','ลันจ์ถือดัมเบล (Dumbbell Lunge)','ต้นขาหน้า · ก้น · ต้นขาหลัง'],
+['ก้น','ฮิปทรัสต์ถือดัมเบล (Dumbbell Hip Thrust)','ก้น · ต้นขาหลัง'],
+['คาร์ดิโอ','ดัมเบลทรัสเตอร์ (Dumbbell Thruster)','ทั้งตัว · ต้นขา · ไหล่ · หัวใจ'],
 ['พัก','พัก (Rest)',''],
 ];
 const CATS=['ทั้งหมด',...new Set(EX.map(e=>e[0]))];
@@ -184,7 +207,8 @@ let presets=store.get('tp_presets',null)||[
 ];
 let soundOn=store.get('tp_sound',true);
 const save=()=>store.set('tp_presets',presets);
-const total=p=>p.sets*p.intervals.reduce((a,i)=>a+i.sec,0);
+const sumSec=a=>(a||[]).reduce((x,i)=>x+i.sec,0);
+const total=p=>p.sets*sumSec(p.intervals)+sumSec(p.warm)+sumSec(p.cool);
 
 function show(name){['home','edit','run'].forEach(n=>$(n).hidden=n!==name)}
 
@@ -300,8 +324,10 @@ $('btnSound').onclick=()=>{soundOn=!soundOn;store.set('tp_sound',soundOn);setSou
 /* ---------- จับเวลา ---------- */
 let run=null,timer=null,wake=null;
 function build(p){
-  const s=[];
-  for(let k=1;k<=p.sets;k++)p.intervals.forEach(i=>s.push({name:i.name,sec:i.sec,color:i.color,muscle:i.muscle||'',set:k}));
+  const s=[],mk=(i,set,phase,pos,cnt)=>s.push({name:i.name,sec:i.sec,color:i.color,muscle:i.muscle||'',set,phase,pos,cnt});
+  (p.warm||[]).forEach((i,j)=>mk(i,0,'warm',j+1,p.warm.length));
+  for(let k=1;k<=p.sets;k++)p.intervals.forEach((i,j)=>mk(i,k,'main',j+1,p.intervals.length));
+  (p.cool||[]).forEach((i,j)=>mk(i,0,'cool',j+1,p.cool.length));
   return s;
 }
 let wakeErr='',wakeTry=0;
@@ -328,7 +354,7 @@ function enterStep(i,silent){
   $('run').style.setProperty('--c',s.color);
   $('rName').textContent=s.name;
   $('rMuscle').textContent=s.muscle?'💪 '+s.muscle:'';
-  $('rSet').textContent=`รอบ ${s.set}/${run.p.sets} · ${i%run.p.intervals.length+1}/${run.p.intervals.length}`;
+  $('rSet').textContent=s.phase==='warm'?`วอร์มอัพ ${s.pos}/${s.cnt}`:s.phase==='cool'?`คูลดาวน์ ${s.pos}/${s.cnt}`:`รอบ ${s.set}/${run.p.sets} · ${s.pos}/${s.cnt}`;
   if(!silent){beep(1320,.45,.5);vib(200)}
   draw();
 }
@@ -355,6 +381,7 @@ function tick(){
 }
 function finish(){
   run.done=true;run.left=0;
+  if(run.p.planDay!=null){markDone(run.p.planDay,true)}
   $('rName').textContent='เสร็จแล้ว! 🎉';$('rMuscle').textContent='';$('rTime').textContent='0:00';$('rSub').textContent='';
   $('rProg').style.width='100%';$('btnPause').textContent='↺';
   $('run').style.setProperty('--c','#22c55e');
@@ -365,7 +392,7 @@ function stop(){
   try{wake&&wake.release()}catch(e){}
   wake=null;
   $('btnPause').textContent='⏸';
-  renderList();show('home');
+  renderList();renderPlan();show('home');
 }
 $('btnStop').onclick=stop;
 $('btnPause').onclick=()=>{
@@ -388,6 +415,110 @@ document.addEventListener('keydown',e=>{
   else if(e.code==='ArrowLeft')$('btnPrev').click();
   else if(e.code==='Escape')stop();
 });
+
+/* ---------- แผนรายสัปดาห์ ---------- */
+const WEEK=['จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์','เสาร์','อาทิตย์'],WORK=[0,1,2,4,5];
+const GOALS={
+  muscle:{name:'เพิ่มกล้ามเนื้อ',desc:'แบ่งกลุ่มกล้ามเนื้อวันละส่วน ทำหลายรอบ พักสั้น-กลาง',p:{beg:[30,30,3],int:[40,20,4]}},
+  fat:{name:'ลดไขมัน',desc:'HIIT และวงจรทั้งตัว ชีพจรสูง สลับกับวันคาร์ดิโอเบา',p:{beg:[30,30,3],int:[40,20,4]}},
+  strength:{name:'เพิ่มความแข็งแรง',desc:'ท่าหลักขา-ดัน-ดึง ทำช้าและคุมท่า พักนานขึ้น',p:{beg:[30,45,3],int:[30,60,4]}},
+};
+const DAYS={
+muscle:[
+{t:['อก + ไตรเซ็ปส์','อก + ไตรเซ็ปส์'],bw:['Push-up','Decline Push-up','Diamond Push-up','Bench Dip','Plank Up-Down'],db:['Dumbbell Floor Press','Push-up','Tricep Extension','Bench Dip','Plank Up-Down'],cool:'u'},
+{t:['หลัง + แกนกลาง','หลัง + ไบเซ็ปส์'],bw:['Superman','Reverse Fly','Bird Dog','Plank','Dead Bug'],db:['One-arm Dumbbell Row','Bent-over Row','Reverse Fly','Bicep Curl','Hammer Curl'],cool:'u'},
+{t:['ขา + ก้น','ขา + ก้น'],bw:['Squat','Bulgarian Split Squat','Reverse Lunge','Glute Bridge','Calf Raise'],db:['Goblet Squat','Dumbbell Romanian Deadlift','Dumbbell Lunge','Dumbbell Hip Thrust','Calf Raise'],cool:'l'},
+{t:['ไหล่ + หน้าท้อง','ไหล่ + หน้าท้อง'],bw:['Pike Push-up','Plank Up-Down','Plank','Bicycle Crunch','Leg Raise'],db:['Shoulder Press','Lateral Raise','Dumbbell Shrug','Plank','Bicycle Crunch'],cool:'u'},
+{t:['ทั้งตัว','ทั้งตัว'],bw:['Squat','Push-up','Reverse Lunge','Superman','Mountain Climber'],db:['Goblet Squat','Dumbbell Floor Press','One-arm Dumbbell Row','Dumbbell Romanian Deadlift','Dumbbell Thruster'],cool:'f'}],
+fat:[
+{t:['HIIT ทั้งตัว','HIIT ทั้งตัว'],bw:['Burpee','High Knees','Jump Squat','Mountain Climber','Skater Jump'],db:['Dumbbell Thruster','High Knees','Goblet Squat','Mountain Climber','Skater Jump'],cool:'f'},
+{t:['วงจรส่วนบน','วงจรส่วนบน'],bw:['Push-up','Pike Push-up','Bench Dip','Superman','Plank Up-Down'],db:['Dumbbell Floor Press','Shoulder Press','Bent-over Row','Bicep Curl','Tricep Extension'],cool:'u'},
+{t:['คาร์ดิโอ + แกนกลาง','คาร์ดิโอ + แกนกลาง'],bw:['Jumping Jack','Butt Kicks','Bicycle Crunch','Russian Twist','Run in Place'],db:['Jumping Jack','Butt Kicks','Bicycle Crunch','Russian Twist','Run in Place'],cool:'f'},
+{t:['HIIT ขา','HIIT ขา'],bw:['Jump Squat','Reverse Lunge','Skater Jump','High Knees','Glute Bridge'],db:['Goblet Squat','Dumbbell Lunge','Skater Jump','High Knees','Dumbbell Hip Thrust'],cool:'l'},
+{t:['วงจรทั้งตัว','วงจรทั้งตัว'],bw:['Burpee','Push-up','Squat','Mountain Climber','Plank'],db:['Dumbbell Thruster','Dumbbell Floor Press','Dumbbell Romanian Deadlift','One-arm Dumbbell Row','Plank'],cool:'f'}],
+strength:[
+{t:['ขา (เน้นแรง)','ขา (เน้นแรง)'],bw:['Bulgarian Split Squat','Squat','Wall Sit','Glute Bridge'],db:['Goblet Squat','Dumbbell Romanian Deadlift','Dumbbell Lunge','Calf Raise'],cool:'l'},
+{t:['ดัน (อก ไหล่ ไตรเซ็ปส์)','ดัน (อก ไหล่ ไตรเซ็ปส์)'],bw:['Decline Push-up','Pike Push-up','Diamond Push-up','Bench Dip'],db:['Dumbbell Floor Press','Shoulder Press','Decline Push-up','Tricep Extension'],cool:'u'},
+{t:['ดึง (หลัง + แกนกลาง)','ดึง (หลัง + แขน)'],bw:['Superman','Reverse Fly','Bird Dog','Dead Bug'],db:['One-arm Dumbbell Row','Bent-over Row','Reverse Fly','Hammer Curl'],cool:'u'},
+{t:['ล่าง + แกนกลาง','ล่าง + แกนกลาง'],bw:['Squat','Reverse Lunge','Plank','Side Plank','Leg Raise'],db:['Goblet Squat','Dumbbell Hip Thrust','Plank','Side Plank','Leg Raise'],cool:'l'},
+{t:['ทั้งตัว (เน้นแรง)','ทั้งตัว (เน้นแรง)'],bw:['Squat','Push-up','Superman','Reverse Lunge','Plank'],db:['Goblet Squat','Dumbbell Floor Press','One-arm Dumbbell Row','Dumbbell Romanian Deadlift','Plank'],cool:'f'}],
+};
+const SUB={'Push-up':'Knee Push-up','Decline Push-up':'Knee Push-up','Diamond Push-up':'Knee Push-up','Burpee':'Jumping Jack','Jump Squat':'Squat','Bulgarian Split Squat':'Lunge','Plank Up-Down':'Plank','Leg Raise':'Dead Bug','Skater Jump':'Reverse Lunge','Dumbbell Thruster':'Goblet Squat'};
+const COOL={u:['Shoulder Stretch',"Child's Pose"],l:['Quad Stretch','Hamstring Stretch','Hip Flexor Stretch'],f:["Child's Pose",'Hamstring Stretch','Shoulder Stretch']};
+const X=k=>EX.find(e=>e[1].includes('('+k+')'));
+const exIv=(k,sec,ci)=>{const e=X(k);return iv(e[1],sec,ci,e[2])};
+
+function genDay(sel,d,idx,title){
+  const [w,r,n]=GOALS[sel.goal].p[sel.level];
+  let keys=d[sel.equip];
+  if(sel.level==='beg')keys=[...new Set(keys.map(k=>SUB[k]||k))];
+  const intervals=[];
+  keys.forEach(k=>{intervals.push(exIv(k,w,1));intervals.push(iv('พัก',r,0))});
+  const warmK=sel.level==='beg'?['Jumping Jack','Arm Circles','Squat']:['Jumping Jack','High Knees','Arm Circles','Squat'];
+  return {id:'plan'+idx,name:WEEK[idx]+' · '+title,sets:n,intervals,
+    warm:warmK.map(k=>exIv(k,30,3)),cool:COOL[d.cool].map(k=>exIv(k,30,5)),planDay:idx};
+}
+function genWeek(sel){
+  return WEEK.map((day,i)=>{
+    const di=WORK.indexOf(i);
+    if(di<0)return {day,rest:true,note:i===3?'เดินเบาๆ 20–30 นาที หรือนอนพักให้เต็มที่':'ยืดเหยียดเบาๆ และเตรียมตัวสัปดาห์ใหม่'};
+    const d=DAYS[sel.goal][di],title=d.t[sel.equip==='bw'?0:1];
+    return {day,title,timer:genDay(sel,d,i,title)};
+  });
+}
+function flatten(t){
+  const main=[];for(let k=0;k<t.sets;k++)t.intervals.forEach(i=>main.push({...i}));
+  return {id:uid(),name:t.name,sets:1,intervals:[...t.warm.map(x=>({...x})),...main,...t.cool.map(x=>({...x}))]};
+}
+let planSel=Object.assign({goal:'muscle',equip:'bw',level:'beg'},store.get('tp_plan',{}));
+let done=store.get('tp_done',{}),curWeek=[];
+const wkKey=()=>{const d=new Date(),m=new Date(d.getFullYear(),d.getMonth(),d.getDate()-((d.getDay()+6)%7));return m.getFullYear()+'-'+(m.getMonth()+1)+'-'+m.getDate()};
+const isDone=i=>!!done[wkKey()+'|'+i];
+function markDone(i,v){
+  const k=wkKey()+'|'+i;
+  if(v)done[k]=1;else delete done[k];
+  Object.keys(done).forEach(x=>{if(!x.startsWith(wkKey()+'|'))delete done[x]});
+  store.set('tp_done',done);
+}
+const chips=(key,opts)=>'<div class="chiprow">'+opts.map(([v,l])=>`<button class="chip ${planSel[key]===v?'on':''}" data-k="${key}" data-v="${v}">${l}</button>`).join('')+'</div>';
+function renderPlan(){
+  curWeek=genWeek(planSel);
+  const today=(new Date().getDay()+6)%7;
+  const nDone=curWeek.filter((x,i)=>!x.rest&&isDone(i)).length;
+  $('plan').innerHTML=
+   `<div class="grp"><label class="l">เป้าหมาย</label>${chips('goal',Object.entries(GOALS).map(([k,g])=>[k,g.name]))}</div>
+    <div class="grp"><label class="l">อุปกรณ์</label>${chips('equip',[['bw','น้ำหนักตัว'],['db','มีดัมเบล']])}</div>
+    <div class="grp"><label class="l">ระดับ</label>${chips('level',[['beg','เริ่มต้น'],['int','เคยออกกำลังกายมาแล้ว']])}</div>
+    <div class="meta" style="color:var(--mute);margin:12px 0 14px;font-size:.9rem">${GOALS[planSel.goal].desc}<br>ทำแล้ว ${nDone}/5 วันในสัปดาห์นี้ · กดชื่อวันเพื่อดูท่า</div>`+
+   curWeek.map((x,i)=>{
+     if(x.rest)return `<div class="card ${i===today?'today':''}" style="opacity:.75"><div class="info"><div class="name">${x.day} · พักผ่อน 😴</div><div class="meta">${x.note}</div></div></div>`;
+     const t=x.timer,main=t.intervals.filter(v=>v.name!=='พัก');
+     const list=main.map(v=>`<li>${esc(v.name)}${v.muscle?`<small>💪 ${esc(v.muscle)}</small>`:''}</li>`).join('')
+       +`<li><small>วอร์มอัพ: ${t.warm.map(v=>esc(v.name.replace(/ \(.*\)/,''))).join(', ')}</small></li>`
+       +`<li><small>คูลดาวน์: ${t.cool.map(v=>esc(v.name.replace(/ \(.*\)/,''))).join(', ')}</small></li>`;
+     return `<div class="card ${i===today?'today':''}" data-i="${i}">
+       <button class="chk ${isDone(i)?'on':''}" data-chk title="ทำแล้ว">${isDone(i)?'✓':''}</button>
+       <div class="info"><details><summary><div class="name">${x.day} · ${esc(x.title)}</div>
+         <div class="meta">${fmt(total(t))} นาที · ${main.length} ท่า × ${t.sets} รอบ</div></summary>
+         <ul class="exl">${list}</ul><button class="sm" data-copy style="margin-top:8px">คัดลอกไปเป็นไทเมอร์ของฉัน</button></details></div>
+       <button class="primary play" data-play>▶</button></div>`;
+   }).join('');
+}
+$('plan').addEventListener('click',e=>{
+  const c=e.target.closest('[data-k]');
+  if(c){planSel[c.dataset.k]=c.dataset.v;store.set('tp_plan',planSel);renderPlan();return}
+  const card=e.target.closest('.card[data-i]');if(!card)return;
+  const i=+card.dataset.i,day=curWeek[i];
+  if(e.target.closest('[data-chk]')){markDone(i,!isDone(i));renderPlan()}
+  else if(e.target.closest('[data-play]'))startRun(day.timer);
+  else if(e.target.closest('[data-copy]')){presets.push(flatten(day.timer));save();renderList();e.target.textContent='✓ คัดลอกแล้ว (ดูในแท็บไทเมอร์)';e.target.disabled=true}
+});
+function setTab(t){
+  $('tabT').classList.toggle('on',t==='t');$('tabP').classList.toggle('on',t==='p');
+  $('list').hidden=t!=='t';$('plan').hidden=t!=='p';$('btnNew').hidden=t!=='t';
+  if(t==='p')renderPlan();
+}
+$('tabT').onclick=()=>setTab('t');$('tabP').onclick=()=>setTab('p');
 
 renderList();
 if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js').catch(()=>{});
