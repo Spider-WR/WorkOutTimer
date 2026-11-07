@@ -45,6 +45,14 @@ label.l{display:block;color:var(--mute);font-size:.8rem;margin:12px 0 4px}
 .ctrls{display:flex;gap:14px;align-items:center;justify-content:center}
 .ctrls button{background:#0005;width:60px;height:60px;border-radius:50%;padding:0;font-size:1.3rem}
 .ctrls button.big{width:84px;height:84px;background:#fff;color:#111;font-size:2rem}
+#picker{position:fixed;inset:0;background:var(--bg);z-index:10;overflow-y:auto}
+#picker .screen{padding-top:12px}
+.chips{display:flex;gap:6px;overflow-x:auto;padding:10px 0;position:sticky;top:0;background:var(--bg)}
+.chip{flex:none;padding:6px 14px;border-radius:99px;font-size:.9rem}
+.chip.on{background:var(--acc);color:#04202e;font-weight:700}
+.ex{display:block;width:100%;text-align:left;background:var(--card);margin-bottom:8px;padding:12px 14px}
+.ex b{display:block}
+.ex span{color:var(--mute);font-size:.85rem}
 [hidden]{display:none!important}
 .empty{color:var(--mute);text-align:center;padding:30px 0}
 </style>
@@ -76,6 +84,7 @@ label.l{display:block;color:var(--mute);font-size:.8rem;margin:12px 0 4px}
   <div class="top"><span id="rSet"></span><span><button class="sm" id="btnSound" style="background:#0004">🔊</button> <button class="sm" id="btnStop" style="background:#0004">✕ ปิด</button></span></div>
   <div>
     <div id="rName"></div>
+    <div id="rMuscle" style="margin-top:6px;font-size:1.1rem;color:#fffd"></div>
     <div id="rTime">0:00</div>
     <div id="rSub"></div>
     <div id="rWake" style="margin-top:10px;font-size:.8rem;color:#fff9"></div>
@@ -90,13 +99,82 @@ label.l{display:block;color:var(--mute);font-size:.8rem;margin:12px 0 4px}
   </div>
 </div>
 
+<!-- เลือกท่า -->
+<div id="picker" hidden>
+  <div class="screen">
+    <header><h1>เลือกท่าออกกำลังกาย</h1><button id="pClose">✕ ปิด</button></header>
+    <input id="pSearch" placeholder="ค้นหา เช่น squat, อก, ขา" style="width:100%">
+    <div class="chips" id="pChips"></div>
+    <div id="pList"></div>
+  </div>
+</div>
+
 <script>
 const COLORS=['#22c55e','#ef4444','#3b82f6','#f59e0b','#a855f7','#14b8a6','#ec4899'];
 const $=id=>document.getElementById(id);
 const store={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
 const uid=()=>Math.random().toString(36).slice(2,9);
 const fmt=s=>{s=Math.max(0,Math.ceil(s));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')};
-const iv=(name,sec,ci)=>({name,sec,color:COLORS[ci]});
+const iv=(name,sec,ci,muscle='')=>({name,sec,color:COLORS[ci],muscle});
+
+/* [หมวด, ชื่อท่า, ส่วนที่ได้] */
+const EX=[
+['อก','วิดพื้น (Push-up)','อกใหญ่ · ไหล่หน้า · ไตรเซ็ปส์'],
+['อก','วิดพื้นมือชิด (Diamond Push-up)','ไตรเซ็ปส์ · อกส่วนใน'],
+['อก','วิดพื้นเท้าสูง (Decline Push-up)','อกส่วนบน · ไหล่หน้า'],
+['อก','วิดพื้นคุกเข่า (Knee Push-up)','อกใหญ่ · ไตรเซ็ปส์ (ระดับเริ่มต้น)'],
+['อก','ดิปเก้าอี้ (Bench Dip)','ไตรเซ็ปส์ · อกส่วนล่าง'],
+['หลัง','ซูเปอร์แมน (Superman)','หลังส่วนล่าง · ก้น'],
+['หลัง','ดึงข้อ (Pull-up)','ปีกหลัง · ไบเซ็ปส์'],
+['หลัง','ก้มพายเรือ (Bent-over Row)','หลังส่วนกลาง · ปีกหลัง · ไบเซ็ปส์'],
+['หลัง','ก้มกางแขน (Reverse Fly)','ไหล่หลัง · สะบัก'],
+['หลัง','ยกแขนขาสลับนอนคว่ำ (Bird Dog)','หลังส่วนล่าง · แกนกลางลำตัว'],
+['ไหล่','พุชอัพก้นสูง (Pike Push-up)','ไหล่ · ไตรเซ็ปส์'],
+['ไหล่','ดัมเบลเพรสไหล่ (Shoulder Press)','ไหล่ · ไตรเซ็ปส์'],
+['ไหล่','ยกแขนด้านข้าง (Lateral Raise)','ไหล่ด้านข้าง'],
+['ไหล่','หมุนแขน (Arm Circles)','ไหล่ · วอร์มอัพ'],
+['แขน','ไบเซ็ปส์เคิร์ล (Bicep Curl)','ไบเซ็ปส์ · ปลายแขน'],
+['แขน','แฮมเมอร์เคิร์ล (Hammer Curl)','ไบเซ็ปส์ · ปลายแขน'],
+['แขน','ไตรเซ็ปส์เอ็กซ์เทนชัน (Tricep Extension)','ไตรเซ็ปส์'],
+['แขน','แพลงก์ขึ้นลง (Plank Up-Down)','ไตรเซ็ปส์ · ไหล่ · แกนกลางลำตัว'],
+['ขา','สควอช (Squat)','ต้นขาหน้า · ก้น · ต้นขาหลัง'],
+['ขา','สควอชกระโดด (Jump Squat)','ต้นขา · ก้น · น่อง · หัวใจ'],
+['ขา','ซูโม่สควอช (Sumo Squat)','ต้นขาด้านใน · ก้น'],
+['ขา','ลันจ์ (Lunge)','ต้นขาหน้า · ก้น'],
+['ขา','ลันจ์ถอยหลัง (Reverse Lunge)','ก้น · ต้นขาหลัง · ต้นขาหน้า'],
+['ขา','บัลแกเรียนสปลิตสควอช (Bulgarian Split Squat)','ต้นขาหน้า · ก้น'],
+['ขา','นั่งพิงกำแพง (Wall Sit)','ต้นขาหน้า · ก้น'],
+['ขา','เขย่งปลายเท้า (Calf Raise)','น่อง'],
+['ขา','ก้าวขึ้นบันได (Step-up)','ต้นขา · ก้น · น่อง'],
+['ก้น','ยกสะโพก (Glute Bridge)','ก้น · ต้นขาหลัง'],
+['ก้น','ฮิปทรัสต์ (Hip Thrust)','ก้น · ต้นขาหลัง'],
+['ก้น','เตะก้นขึ้น (Donkey Kick)','ก้น'],
+['ก้น','ยกขาด้านข้างคุกเข่า (Fire Hydrant)','ก้นด้านข้าง · สะโพก'],
+['หน้าท้อง','แพลงก์ (Plank)','หน้าท้องทั้งหมด · แกนกลางลำตัว · ไหล่'],
+['หน้าท้อง','แพลงก์ด้านข้าง (Side Plank)','หน้าท้องด้านข้าง · เอว'],
+['หน้าท้อง','ครันช์ (Crunch)','หน้าท้องส่วนบน'],
+['หน้าท้อง','ซิทอัพ (Sit-up)','หน้าท้อง · สะโพกด้านหน้า'],
+['หน้าท้อง','ครันช์จักรยาน (Bicycle Crunch)','หน้าท้อง · ด้านข้างลำตัว'],
+['หน้าท้อง','ยกขา (Leg Raise)','หน้าท้องส่วนล่าง'],
+['หน้าท้อง','รัสเซียนทวิสต์ (Russian Twist)','หน้าท้องด้านข้าง · เอว'],
+['หน้าท้อง','ปีนเขา (Mountain Climber)','หน้าท้อง · ไหล่ · ขา · หัวใจ'],
+['หน้าท้อง','เดดบัค (Dead Bug)','แกนกลางลำตัว · หน้าท้องส่วนล่าง'],
+['คาร์ดิโอ','กระโดดตบ (Jumping Jack)','ทั้งตัว · หัวใจ'],
+['คาร์ดิโอ','วิ่งยกเข่าสูง (High Knees)','ต้นขา · น่อง · หน้าท้อง · หัวใจ'],
+['คาร์ดิโอ','เบอร์พี (Burpee)','ทั้งตัว · หัวใจ'],
+['คาร์ดิโอ','วิ่งเตะก้น (Butt Kicks)','ต้นขาหลัง · น่อง · หัวใจ'],
+['คาร์ดิโอ','กระโดดสเก็ต (Skater Jump)','ขา · ก้น · ทรงตัว · หัวใจ'],
+['คาร์ดิโอ','กระโดดเชือก (Jump Rope)','น่อง · ไหล่ · หัวใจ'],
+['คาร์ดิโอ','ชกลม (Shadow Boxing)','ไหล่ · แขน · แกนกลางลำตัว · หัวใจ'],
+['คาร์ดิโอ','วิ่งอยู่กับที่ (Run in Place)','ขา · หัวใจ'],
+['ยืดเหยียด','ยืดต้นขาหน้า (Quad Stretch)','ต้นขาหน้า'],
+['ยืดเหยียด','ยืดต้นขาหลัง (Hamstring Stretch)','ต้นขาหลัง · หลังส่วนล่าง'],
+['ยืดเหยียด','ยืดไหล่ (Shoulder Stretch)','ไหล่ · สะบัก'],
+['ยืดเหยียด','ท่าเด็ก (Child\'s Pose)','หลัง · สะโพก · ไหล่'],
+['ยืดเหยียด','ยืดสะโพก (Hip Flexor Stretch)','สะโพกด้านหน้า · ต้นขาหน้า'],
+['พัก','พัก (Rest)',''],
+];
+const CATS=['ทั้งหมด',...new Set(EX.map(e=>e[0]))];
 
 let presets=store.get('tp_presets',null)||[
   {id:uid(),name:'Tabata',sets:8,intervals:[iv('ออกแรง',20,1),iv('พัก',10,0)]},
@@ -148,6 +226,8 @@ function renderRows(){
       <input data-f="name" value="${esc(it.name)}" style="flex:1" placeholder="ชื่อ">
       <button class="sm" data-up ${i==0?'disabled':''}>↑</button><button class="sm" data-down ${i==draft.intervals.length-1?'disabled':''}>↓</button>
       <button class="sm danger" data-rm ${draft.intervals.length<2?'disabled':''}>🗑</button></div>
+    <div class="row"><button class="sm" data-pick>📋 เลือกท่า</button>
+      <input data-f="muscle" value="${esc(it.muscle||'')}" style="flex:1" placeholder="ส่วนที่ได้ (ไม่บังคับ)"></div>
     <div class="row"><input data-f="m" type="number" min="0" max="999" class="num" value="${Math.floor(it.sec/60)}"> นาที
       <input data-f="s" type="number" min="0" max="59" class="num" value="${it.sec%60}"> วินาที</div></div>`).join('');
 }
@@ -155,6 +235,7 @@ $('eRows').addEventListener('input',e=>{
   const row=e.target.closest('.ivl');if(!row)return;
   const it=draft.intervals[+row.dataset.i],f=e.target.dataset.f;
   if(f==='name')it.name=e.target.value;
+  else if(f==='muscle')it.muscle=e.target.value;
   else{const m=+row.querySelector('[data-f=m]').value||0,s=+row.querySelector('[data-f=s]').value||0;it.sec=m*60+s}
 });
 $('eRows').addEventListener('click',e=>{
@@ -164,9 +245,29 @@ $('eRows').addEventListener('click',e=>{
   else if(e.target.closest('[data-up]')&&i>0){[a[i-1],a[i]]=[a[i],a[i-1]]}
   else if(e.target.closest('[data-down]')&&i<a.length-1){[a[i+1],a[i]]=[a[i],a[i+1]]}
   else if(e.target.closest('[data-rm]')&&a.length>1){a.splice(i,1)}
+  else if(e.target.closest('[data-pick]')){openPicker(i);return}
   else return;
   renderRows();
 });
+
+/* ---------- เลือกท่า ---------- */
+let pickIdx=0,pickCat='ทั้งหมด';
+function openPicker(i){pickIdx=i;pickCat='ทั้งหมด';$('pSearch').value='';renderPicker();$('picker').hidden=false;$('picker').scrollTop=0}
+function renderPicker(){
+  $('pChips').innerHTML=CATS.map(c=>`<button class="chip ${c===pickCat?'on':''}" data-cat="${c}">${c}</button>`).join('');
+  const q=$('pSearch').value.trim().toLowerCase();
+  const rows=EX.map((e,n)=>[e,n]).filter(([e])=>(pickCat==='ทั้งหมด'||e[0]===pickCat)&&(!q||(e[0]+e[1]+e[2]).toLowerCase().includes(q)));
+  $('pList').innerHTML=rows.length?rows.map(([e,n])=>`<button class="ex" data-n="${n}"><b>${esc(e[1])}</b><span>${e[2]?'💪 '+esc(e[2]):'ช่วงพักฟื้น'}</span></button>`).join(''):'<div class="empty">ไม่พบท่าที่ค้นหา</div>';
+}
+$('pChips').addEventListener('click',e=>{const c=e.target.closest('[data-cat]');if(c){pickCat=c.dataset.cat;renderPicker()}});
+$('pSearch').addEventListener('input',renderPicker);
+$('pList').addEventListener('click',e=>{
+  const b=e.target.closest('[data-n]');if(!b)return;
+  const ex=EX[+b.dataset.n],it=draft.intervals[pickIdx];
+  it.name=ex[1];it.muscle=ex[2];
+  $('picker').hidden=true;renderRows();
+});
+$('pClose').onclick=()=>{$('picker').hidden=true};
 $('btnAdd').onclick=()=>{const n=draft.intervals.length;draft.intervals.push(iv('Interval '+(n+1),30,n%COLORS.length));renderRows()};
 $('btnBack').onclick=()=>{renderList();show('home')};
 function commit(){
@@ -200,7 +301,7 @@ $('btnSound').onclick=()=>{soundOn=!soundOn;store.set('tp_sound',soundOn);setSou
 let run=null,timer=null,wake=null;
 function build(p){
   const s=[];
-  for(let k=1;k<=p.sets;k++)p.intervals.forEach(i=>s.push({name:i.name,sec:i.sec,color:i.color,set:k}));
+  for(let k=1;k<=p.sets;k++)p.intervals.forEach(i=>s.push({name:i.name,sec:i.sec,color:i.color,muscle:i.muscle||'',set:k}));
   return s;
 }
 let wakeErr='',wakeTry=0;
@@ -226,6 +327,7 @@ function enterStep(i,silent){
   run.left=s.sec*1000;run.end=Date.now()+run.left;run.last=null;
   $('run').style.setProperty('--c',s.color);
   $('rName').textContent=s.name;
+  $('rMuscle').textContent=s.muscle?'💪 '+s.muscle:'';
   $('rSet').textContent=`รอบ ${s.set}/${run.p.sets} · ${i%run.p.intervals.length+1}/${run.p.intervals.length}`;
   if(!silent){beep(1320,.45,.5);vib(200)}
   draw();
@@ -253,7 +355,7 @@ function tick(){
 }
 function finish(){
   run.done=true;run.left=0;
-  $('rName').textContent='เสร็จแล้ว! 🎉';$('rTime').textContent='0:00';$('rSub').textContent='';
+  $('rName').textContent='เสร็จแล้ว! 🎉';$('rMuscle').textContent='';$('rTime').textContent='0:00';$('rSub').textContent='';
   $('rProg').style.width='100%';$('btnPause').textContent='↺';
   $('run').style.setProperty('--c','#22c55e');
   [0,.22,.44].forEach(d=>setTimeout(()=>beep(1320,.2,.5),d*1000));vib([200,100,200,100,400]);
